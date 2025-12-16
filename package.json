@@ -1,0 +1,20 @@
+{
+  "name": "licorne_2026",
+  "version": "1.0.0",
+  "description": "An RPG based gamification of GitHub actions",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
+  }
+}
