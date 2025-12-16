@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MainScene } from './scenes/MainScene';
+import { WorldScene } from "./scenes/WorldScene";
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -11,7 +12,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [MainScene],
+  scene: [MainScene, WorldScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH
