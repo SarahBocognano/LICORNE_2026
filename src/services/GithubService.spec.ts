@@ -63,7 +63,7 @@ describe('GitHubService - PRs without reviews', () => {
     }, 30000);
   });
 
-    describe('fetchPRsWithoutActivitySince', () => {
+  describe('fetchPRsWithoutActivitySince', () => {
     it('should find PRs without reviews or comments older than 3 days', async () => {
       const minAgeDays = 3;
       
@@ -92,4 +92,103 @@ describe('GitHubService - PRs without reviews', () => {
       });
     }, 60000);
   });
+
+  describe('getReviewerStatsByUsername', () => {
+    it('should get stats for a specific reviewer', async () => {
+      // First get all reviewers to pick one
+      const allReviewers = await service.getReviewerStats();
+      
+      if (allReviewers.length === 0) {
+        console.log('⚠️  No reviewers found');
+        return;
+      }
+
+      const testUsername = allReviewers[0].username;
+      const stats = await service.getReviewerStatsByUsername(testUsername);
+      console.log("allReviewers[0]", allReviewers[0])
+
+      expect(stats).not.toBeNull();
+      if (stats) {
+        console.log(`\n📊 Stats for ${testUsername}:`);
+        console.log(`   Total points: ${stats.points}`);
+        console.log(`   Total reviews: ${stats.reviewCount}`);
+        console.log(`   Approvals: ${stats.approvals}`);
+        console.log(`   Changes requested: ${stats.changesRequested}`);
+        console.log(`   Comments: ${stats.comments}`);
+
+        expect(stats.username).toBe(testUsername);
+      }
+    }, 60000);
+
+    it('should return null for non-existent reviewer', async () => {
+      const stats = await service.getReviewerStatsByUsername('nonexistent-user-12345');
+      expect(stats).toBeNull();
+    }, 60000);
+  });
+
+  describe('user stats ', () => {
+      it('should fetch all reviewer stats', async () => {
+      const stats = await service.getReviewerStats('all', 50);
+
+      console.log(`\n🏆 Reviewer Leaderboard (${TEST_OWNER}/${TEST_REPO})`);
+      console.log('='.repeat(80));
+      console.log(`Total reviewers: ${stats.length}\n`);
+
+      stats.slice(0, 10).forEach((reviewer, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+        console.log(`${medal} ${reviewer.username}`);
+        console.log(`   💯 Points: ${reviewer.points}`);
+        console.log(`   📊 Total Reviews: ${reviewer.reviewCount}`);
+        console.log(`   ✅ Approvals: ${reviewer.approvals}`);
+        console.log(`   🔄 Changes Requested: ${reviewer.changesRequested}`);
+        console.log(`   💬 Comments: ${reviewer.comments}`);
+        console.log('');
+      });
+
+      expect(Array.isArray(stats)).toBe(true);
+      expect(stats.length).toBeGreaterThan(0);
+    }, 120000);
+
+    it('should fetch stats for specific user', async () => {
+      // Get all reviewers first
+      const allStats = await service.getReviewerStats('all', 30);
+      
+      if (allStats.length === 0) {
+        console.log('⚠️  No reviewers found');
+        return;
+      }
+
+      // Get detailed stats for top reviewer
+      const topReviewer = allStats[0];
+      const userStats = await service.getReviewerStatsByUsername(topReviewer.username, 'all', 30);
+
+      console.log(`\n👤 Detailed Stats for: ${topReviewer.username}`);
+      console.log('='.repeat(80));
+      if (userStats) {
+        console.log(`Rank: #1`);
+        console.log(`Total Points: ${userStats.points}`);
+        console.log(`Total Reviews: ${userStats.reviewCount}`);
+        console.log(`Breakdown:`);
+        console.log(`  - ✅ Approvals: ${userStats.approvals} (${userStats.approvals * 50} points)`);
+        console.log(`  - 🔄 Changes Requested: ${userStats.changesRequested} (${userStats.changesRequested * 30} points)`);
+        console.log(`  - 💬 Comments: ${userStats.comments} (${userStats.comments * 10} points)`);
+      }
+
+      expect(userStats).not.toBeNull();
+    }, 120000);
+
+    it('should fetch top 5 reviewers', async () => {
+      const top5 = await service.getTopReviewers(5, 'all', 30);
+
+      console.log(`\n🏆 Top 5 Reviewers`);
+      
+      top5.forEach((reviewer, index) => {
+        const rank = index + 1;
+        console.log(`#${rank} ${reviewer.username} - ${reviewer.points} points (${reviewer.reviewCount} reviews)`);
+      });
+
+      expect(top5.length).toBeLessThanOrEqual(5);
+      expect(top5.length).toBeGreaterThan(0);
+    }, 120000);
+  })
 });
