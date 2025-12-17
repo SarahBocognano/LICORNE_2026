@@ -8,6 +8,7 @@ export class MainScene extends Phaser.Scene {
   preload(): void {
     this.load.tilemapTiledJSON('map', 'finalMap.json');
     this.load.image('tiles', 'spritesheet.png');
+    this.load.atlas('a-king', 'a-king.png', 'a-king_atlas.json');
   }
 
   create(): void {
