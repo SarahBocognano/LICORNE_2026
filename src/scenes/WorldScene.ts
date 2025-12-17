@@ -2,8 +2,11 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { NPC } from '../objects/Npc';
 import { ServiceRegistry } from '../services/ServiceRegistry';
+import { XPSystem } from '../services/XPSystem';
+import { GitHubActivityTracker } from '../services/GitHubActivityTracker';
 import { DialogManager } from '../utils/DialogManager';
 import { buildPRListHTML } from '../utils/PrListBuilder';
+import { XPDisplay } from '../ui/XpDisplay';
 
 export class WorldScene extends Phaser.Scene {
   private player!: Player;
@@ -16,6 +19,7 @@ export class WorldScene extends Phaser.Scene {
   private isNearNPC = false;
   private interactionText?: Phaser.GameObjects.Text;
   private hasShownDialog = false;
+  private xpDisplay!: XPDisplay;
 
   constructor() {
     super({ key: 'WorldScene' });
@@ -39,6 +43,18 @@ export class WorldScene extends Phaser.Scene {
     const npcPoint = this.map.findObject('Objects', (obj) => obj.name === 'NPC') || { x: 500, y: 300 };
     this.npc = new NPC(this, npcPoint.x as number, npcPoint.y as number);
 
+    // Create XP display (top-left)
+    const displayX = 40;
+    this.xpDisplay = new XPDisplay(this, displayX, 40);
+
+    // Add sync button below XP display
+    this.createSyncButton(displayX, 120);
+
+    // Prompt for username if not set
+    if (!GitHubActivityTracker.hasUsername()) {
+      this.promptForUsername();
+    }
+
     // Config of physics
     this.physics.add.collider(this.player, this.worldLayer);
 
@@ -57,11 +73,148 @@ export class WorldScene extends Phaser.Scene {
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
 
+      // Press E to interact with NPC
       this.input.keyboard.on('keydown-E', () => {
         if (this.isNearNPC && !DialogManager.isOpen()) {
           this.showPRDialog();
         }
       });
+
+      // Press S to sync GitHub activity
+      this.input.keyboard.on('keydown-S', () => {
+        this.syncGitHubActivity();
+      });
+    }
+  }
+
+  /**
+   * Create sync button
+   */
+  private createSyncButton(x: number, y: number): void {
+    const button = this.add.container(x, y);
+    button.setScrollFactor(0);
+    button.setDepth(10000);
+
+    const bg = this.add.rectangle(0, 0, 250, 40, 0x4493f8, 0.9)
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true });
+
+    const text = this.add.text(125, 20, '🔄 Sync Activity (S)', {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    button.add([bg, text]);
+
+    // Hover effect
+    bg.on('pointerover', () => {
+      bg.setFillStyle(0x5aa3ff);
+    });
+
+    bg.on('pointerout', () => {
+      bg.setFillStyle(0x4493f8);
+    });
+
+    bg.on('pointerdown', () => {
+      this.syncGitHubActivity();
+    });
+
+    // Pulse animation
+    this.tweens.add({
+      targets: button,
+      alpha: 0.8,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  /**
+   * Prompt user for GitHub username
+   */
+  private promptForUsername(): void {
+    setTimeout(() => {
+      const username = prompt('Enter your GitHub username to track XP:');
+      if (username && username.trim()) {
+        GitHubActivityTracker.setUsername(username.trim());
+        alert(`✅ Username set to: ${username.trim()}\n\nSyncing your GitHub activity...`);
+        
+        // Auto-sync after setting username
+        this.syncGitHubActivity();
+      }
+    }, 1000);
+  }
+
+  /**
+   * Sync GitHub activity and award XP
+   */
+  private async syncGitHubActivity(): Promise<void> {
+    if (!GitHubActivityTracker.hasUsername()) {
+      alert('Please set your GitHub username first!');
+      this.promptForUsername();
+      return;
+    }
+
+    try {
+      // Show loading
+      const loadingText = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        '🔄 Syncing GitHub activity...\nThis may take a few seconds',
+        {
+          fontFamily: 'Arial',
+          fontSize: '20px',
+          color: '#ffffff',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          padding: { x: 20, y: 10 },
+          align: 'center',
+        }
+      ).setOrigin(0.5);
+      loadingText.setScrollFactor(0);
+      loadingText.setDepth(10001);
+
+      // Sync activity (1+ hour for testing, 7+ days for production)
+      const result = await GitHubActivityTracker.syncXP({ 
+        minAge: 1, 
+        timeUnit: 'hours' 
+      });
+      // Production: await GitHubActivityTracker.syncXP();
+
+      loadingText.destroy();
+
+      if (result.xpGained > 0) {
+        // Show XP gain animation with level up info
+        const gain = {
+          amount: result.xpGained,
+          reason: result.newActivities.join(', '),
+          leveledUp: result.leveledUp || false,
+          newLevel: result.newLevel,
+        };
+        
+        this.xpDisplay.showXPGain(gain);
+        
+        // Refresh display after animation starts
+        setTimeout(() => {
+          this.xpDisplay.refresh();
+        }, 100);
+
+        // Show success message
+        const levelUpText = result.leveledUp ? `\n\n🎉 LEVEL UP! Now level ${result.newLevel}!` : '';
+        const message = result.newActivities.length > 0
+          ? `✨ Synced!\n\n${result.newActivities.join('\n')}\n\nTotal: +${result.xpGained} XP${levelUpText}`
+          : `✨ First Sync Complete!\n\nGained ${result.xpGained} XP for your existing activity!${levelUpText}`;
+        
+        alert(message);
+      } else {
+        const username = GitHubActivityTracker.getStoredUsername();
+        alert(`✅ Already synced! No new activity found.\n\n💡 To gain XP:\n1. Review/comment on PRs that are 1+ hour old\n2. Wait 2-3 minutes for GitHub API\n3. Sync again (Press S)\n\nYour username: ${username}`);
+      }
+
+    } catch (error) {
+      console.error('Sync error:', error);
+      alert('❌ Failed to sync.\n\nPossible reasons:\n- Username is incorrect\n- GitHub API error\n- Network issue\n\nCheck console for details.');
     }
   }
 
@@ -82,6 +235,7 @@ export class WorldScene extends Phaser.Scene {
         if (this.isNearNPC) {
           this.isNearNPC = false;
           this.destroyInteractionText();
+          this.hasShownDialog = false;
         }
       }
     });
@@ -112,7 +266,7 @@ export class WorldScene extends Phaser.Scene {
     this.interactionText.setDepth(1000);
   }
 
-private async showPRDialog() {
+  private async showPRDialog() {
     // Prevent showing multiple times
     if (this.hasShownDialog) return;
     this.hasShownDialog = true;
@@ -168,6 +322,9 @@ private async showPRDialog() {
             </div>
           </div>
         `,
+        onClose: () => {
+          this.hasShownDialog = false;
+        }
       });
     }
   }
