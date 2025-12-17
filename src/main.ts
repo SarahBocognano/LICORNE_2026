@@ -3,6 +3,8 @@ import { MainScene } from './scenes/MainScene';
 import { WorldScene } from "./scenes/WorldScene";
 import { LauncherScene } from './scenes/LauncherScene';
 import { LeaderboardScene } from './scenes/LeaderboardScene';
+import { PRFireBrigadeScene } from './scenes/PRFireBrigadeScene';
+import { RescueRouletteScene } from './scenes/RescueRouletteScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -14,7 +16,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [MainScene, WorldScene, LauncherScene, LeaderboardScene, MainScene],
+  scene: [MainScene, WorldScene, LauncherScene, LeaderboardScene, PRFireBrigadeScene, RescueRouletteScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH

@@ -1,5 +1,6 @@
 import { graphql } from '@octokit/graphql';
-import { StalePRQueryResult, type GitHubConfig, type LeaderboardQueryResult, type ReviewerStats, type StalePR, type PRWithStatus, type PRStatus, type UrgencyLevel } from './github.types';
+import { StalePRQueryResult, type GitHubConfig, type LeaderboardQueryResult, type ReviewerStats, type StalePR, type PRWithStatus, type PRStatus, type UrgencyLevel, RescuerStats } from './github.types';
+
 
 export class GitHubService {
   private graphql: typeof graphql;
@@ -28,7 +29,7 @@ export class GitHubService {
     let cursor: string | null = null;
     let pagesFetched = 0;
 
-    // Guardrail: don’t scan the whole repo history
+    // Guardrail: don't scan the whole repo history
     while (pagesFetched < 6) {
       const res: LeaderboardQueryResult = await this.graphql(
         LEADERBOARD_QUERY,
@@ -99,6 +100,226 @@ export class GitHubService {
   }
 
   /**
+   * 🚑 RESCUE LEADERBOARD - Who saved the most neglected PRs?
+   * Focuses on reviewers who help OLD/stale PRs (the real heroes!)
+   * 
+   * @param minAge - PRs must be this old to count as "rescued" (default: 7)
+   * @param timeUnit - Time unit for age calculation
+   * @param countComments - Whether to count regular comments as rescues (default: true, at 50% value)
+   */
+  async getRescueLeaderboard(
+    minAge = 7,
+    timeUnit: 'hours' | 'days' = 'days',
+    countComments = true
+  ): Promise<RescuerStats[]> {
+    const leaderboard = new Map<string, RescuerStats>();
+    let cursor: string | null = null;
+    let pagesFetched = 0;
+
+    // Fetch both open and closed PRs
+    const RESCUE_QUERY = `
+      query($owner: String!, $repo: String!, $cursor: String) {
+        repository(owner: $owner, name: $repo) {
+          pullRequests(
+            first: 30
+            after: $cursor
+            states: [OPEN, CLOSED, MERGED]
+            orderBy: { field: CREATED_AT, direction: DESC }
+          ) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              createdAt
+              reviews(first: 30) {
+                nodes {
+                  state
+                  author { login }
+                  submittedAt
+                }
+              }
+              comments(first: 30) {
+                nodes {
+                  author { login }
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    while (pagesFetched < 6) {
+      const res: any = await this.graphql(RESCUE_QUERY, {
+        owner: this.owner,
+        repo: this.repo,
+        cursor,
+      });
+
+      const prConnection = res.repository.pullRequests;
+
+      for (const pr of prConnection.nodes) {
+        const prCreatedAt = new Date(pr.createdAt);
+        const reviewedUsers = new Set<string>();
+
+        // Process formal reviews (full points)
+        for (const review of pr.reviews.nodes) {
+          const username = review.author?.login;
+          const reviewedAt = new Date(review.submittedAt);
+          
+          if (!username || reviewedUsers.has(username)) continue;
+          reviewedUsers.add(username);
+
+          // Calculate PR age when reviewed
+          const ageAtReviewMs = reviewedAt.getTime() - prCreatedAt.getTime();
+          let ageAtReview: number;
+          
+          if (timeUnit === 'hours') {
+            ageAtReview = ageAtReviewMs / (1000 * 60 * 60);
+          } else {
+            ageAtReview = ageAtReviewMs / (1000 * 60 * 60 * 24);
+          }
+
+          // Only count if PR was old enough (a "rescue")
+          if (ageAtReview < minAge) continue;
+
+          const stats = this.getOrCreateRescuer(leaderboard, username);
+          stats.rescueCount++;
+
+          // Award points based on how old the PR was and review type
+          let rescuePoints = 0;
+          let isFullReview = review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED';
+          let multiplier = isFullReview ? 1.0 : 0.5; // Comments get 50% value
+
+          if (timeUnit === 'hours') {
+            // Hours thresholds: 6+ = critical, 3+ = urgent, 1+ = warning
+            if (ageAtReview >= 6) {
+              stats.criticalRescues++;
+              rescuePoints = Math.floor(100 * multiplier);
+            } else if (ageAtReview >= 3) {
+              stats.urgentRescues++;
+              rescuePoints = Math.floor(50 * multiplier);
+            } else {
+              stats.warningRescues++;
+              rescuePoints = Math.floor(25 * multiplier);
+            }
+          } else {
+            // Days thresholds: 14+ = critical, 7+ = urgent, 3+ = warning
+            if (ageAtReview >= 14) {
+              stats.criticalRescues++;
+              rescuePoints = Math.floor(100 * multiplier);
+            } else if (ageAtReview >= 7) {
+              stats.urgentRescues++;
+              rescuePoints = Math.floor(50 * multiplier);
+            } else {
+              stats.warningRescues++;
+              rescuePoints = Math.floor(25 * multiplier);
+            }
+          }
+
+          stats.points += rescuePoints;
+
+          // Track review type
+          switch (review.state) {
+            case 'APPROVED':
+              stats.approvals++;
+              break;
+            case 'CHANGES_REQUESTED':
+              stats.changesRequested++;
+              break;
+            default:
+              stats.comments++;
+          }
+        }
+
+        // Process regular comments if enabled (50% points)
+        if (countComments) {
+          const commentedUsers = new Set<string>();
+          
+          for (const comment of pr.comments.nodes) {
+            const username = comment.author?.login;
+            const commentedAt = new Date(comment.createdAt);
+            
+            if (!username || commentedUsers.has(username) || reviewedUsers.has(username)) {
+              continue; // Skip if already reviewed or commented
+            }
+            commentedUsers.add(username);
+
+            // Calculate PR age when commented
+            const ageAtCommentMs = commentedAt.getTime() - prCreatedAt.getTime();
+            let ageAtComment: number;
+            
+            if (timeUnit === 'hours') {
+              ageAtComment = ageAtCommentMs / (1000 * 60 * 60);
+            } else {
+              ageAtComment = ageAtCommentMs / (1000 * 60 * 60 * 24);
+            }
+
+            // Only count if PR was old enough
+            if (ageAtComment < minAge) continue;
+
+            const stats = this.getOrCreateRescuer(leaderboard, username);
+            stats.rescueCount++;
+
+            // Award 50% points for comments
+            let rescuePoints = 0;
+            
+            if (timeUnit === 'hours') {
+              if (ageAtComment >= 6) {
+                stats.criticalRescues++;
+                rescuePoints = 50; // 50% of 100
+              } else if (ageAtComment >= 3) {
+                stats.urgentRescues++;
+                rescuePoints = 25; // 50% of 50
+              } else {
+                stats.warningRescues++;
+                rescuePoints = 12; // 50% of 25
+              }
+            } else {
+              if (ageAtComment >= 14) {
+                stats.criticalRescues++;
+                rescuePoints = 50; // 50% of 100
+              } else if (ageAtComment >= 7) {
+                stats.urgentRescues++;
+                rescuePoints = 25; // 50% of 50
+              } else {
+                stats.warningRescues++;
+                rescuePoints = 12; // 50% of 25
+              }
+            }
+
+            stats.points += rescuePoints;
+            stats.comments++; // Track as comment rescue
+          }
+        }
+      }
+
+      if (!prConnection.pageInfo.hasNextPage) break;
+      cursor = prConnection.pageInfo.endCursor;
+      pagesFetched++;
+    }
+
+    return Array.from(leaderboard.values()).sort(
+      (a, b) => b.points - a.points
+    );
+  }
+
+  /**
+   * Get top N rescuers
+   */
+  async getTopRescuers(
+    limit = 10, 
+    minAge = 7, 
+    timeUnit: 'hours' | 'days' = 'days',
+    countComments = true
+  ): Promise<RescuerStats[]> {
+    const leaderboard = await this.getRescueLeaderboard(minAge, timeUnit, countComments);
+    return leaderboard.slice(0, limit);
+  }
+
+  /**
    * Internal helper
    */
   private getOrCreateReviewer(
@@ -114,6 +335,29 @@ export class GitHubService {
         comments: 0,
         totalComments: 0,
         reactions: 0,
+        points: 0,
+      });
+    }
+    return map.get(username)!;
+  }
+
+  /**
+   * Internal helper for rescuer stats
+   */
+  private getOrCreateRescuer(
+    map: Map<string, RescuerStats>,
+    username: string
+  ): RescuerStats {
+    if (!map.has(username)) {
+      map.set(username, {
+        username,
+        rescueCount: 0,
+        criticalRescues: 0,
+        urgentRescues: 0,
+        warningRescues: 0,
+        approvals: 0,
+        changesRequested: 0,
+        comments: 0,
         points: 0,
       });
     }
@@ -146,6 +390,7 @@ export class GitHubService {
         const createdAt = new Date(pr.createdAt);
         const ageMs = now.getTime() - createdAt.getTime();
         
+        
         // Calculate age based on time unit
         let age: number;
         if (timeUnit === 'hours') {
@@ -157,6 +402,11 @@ export class GitHubService {
         if (age < staleTime) continue;
 
         const reviewCount = pr.reviews.nodes.length;
+
+        console.log(
+          `PR #${pr.number} age=${age.toFixed(2)} ${timeUnit}, reviews=${reviewCount}`
+        );
+
         if (onlyUnreviewed && reviewCount > 0) continue;
 
         const commentCount = pr.comments.nodes.length;
@@ -190,6 +440,7 @@ export class GitHubService {
     timeUnit: 'hours' | 'days' = 'days'
   ): Promise<PRWithStatus[]> {
     // Get all stale PRs (3+ time units old)
+    console.log("min time", minTime, timeUnit)
     const stalePRs = await this.fetchStalePRs(minTime, false, timeUnit);
     const now = new Date();
 
@@ -251,84 +502,67 @@ export class GitHubService {
     commentCount: number,
     timeUnit: 'hours' | 'days' = 'days'
   ): PRStatus {
-    const totalActivity = reviewCount + commentCount;
+    const hasReview = reviewCount > 0;
+    const hasComments = commentCount > 0;
 
-    // Adjust thresholds based on time unit
-    // Days: 14, 7, 3
-    // Hours: 6, 3, 1 (proportionally scaled for testing)
     const criticalThreshold = timeUnit === 'hours' ? 6 : 14;
-    const urgentThreshold = timeUnit === 'hours' ? 3 : 7;
-    const warningThreshold = timeUnit === 'hours' ? 1 : 3;
+    const urgentThreshold   = timeUnit === 'hours' ? 3 : 7;
+    const warningThreshold  = timeUnit === 'hours' ? 1 : 3;
 
-    const unit = timeUnit === 'hours' ? 'hour' : 'day';
     const units = timeUnit === 'hours' ? 'hours' : 'days';
 
-    // CRITICAL: Old + No activity
-    if (age >= criticalThreshold && totalActivity === 0) {
+    // 🛑 Reviewed PRs are always safe
+    if (hasReview) {
+      return {
+        urgency: 'normal',
+        message: '✅ Reviewed',
+        color: 0x00ff00,
+        emoji: '✅',
+      };
+    }
+
+    // 🔥 CRITICAL: Old + no reviews
+    if (age >= criticalThreshold) {
       return {
         urgency: 'critical',
-        message: `🔥 CRITICAL: No activity for ${criticalThreshold}+ ${units}`,
+        message: hasComments
+          ? `🔴 CRITICAL: Discussed but not reviewed for ${criticalThreshold}+ ${units}`
+          : `🔥 CRITICAL: No activity for ${criticalThreshold}+ ${units}`,
         color: 0xff0000,
         emoji: '🔥',
       };
     }
 
-    // CRITICAL: Old + Very little activity
-    if (age >= criticalThreshold && totalActivity < 3) {
-      return {
-        urgency: 'critical',
-        message: `🔴 CRITICAL: Almost no activity for ${criticalThreshold}+ ${units}`,
-        color: 0xff4444,
-        emoji: '🔴',
-      };
-    }
-
-    // URGENT: No activity for a while
-    if (age >= urgentThreshold && totalActivity === 0) {
+    // 🟠 URGENT: Aging without review
+    if (age >= urgentThreshold) {
       return {
         urgency: 'urgent',
-        message: `🟠 URGENT: No activity for ${urgentThreshold}+ ${units}`,
+        message: hasComments
+          ? `⚠️ URGENT: Comments but no review`
+          : `🟠 URGENT: No activity for ${urgentThreshold}+ ${units}`,
         color: 0xff8800,
         emoji: '🟠',
       };
     }
 
-    // URGENT: Old with minimal activity
-    if (age >= urgentThreshold && totalActivity < 3) {
-      return {
-        urgency: 'urgent',
-        message: `⚠️ URGENT: Little activity for ${urgentThreshold}+ ${units}`,
-        color: 0xffaa00,
-        emoji: '⚠️',
-      };
-    }
-
-    // WARNING: No reviews but some comments
-    if (age >= warningThreshold && reviewCount === 0 && commentCount > 0) {
+    // 🟡 WARNING: Fresh but ignored
+    if (age >= warningThreshold) {
       return {
         urgency: 'warning',
-        message: '🟡 WARNING: Comments but no reviews',
+        message: hasComments
+          ? '🟡 WARNING: Discussed, no review'
+          : '💭 Needs attention',
         color: 0xffff00,
         emoji: '🟡',
       };
     }
 
-    // WARNING: Getting old
-    if (age >= warningThreshold) {
-      return {
-        urgency: 'warning',
-        message: '💭 Needs attention',
-        color: 0xffdd00,
-        emoji: '💭',
-      };
-    }
-
-    // NORMAL: Recent with activity
+    // 🟢 NORMAL: Fresh PR
     return {
       urgency: 'normal',
-      message: '✅ Active',
-      color: 0x00ff00,
-      emoji: '✅',
+      message: '🆕 New PR',
+      color: 0x66ff66,
+      emoji: '🆕',
     };
   }
 }
@@ -373,14 +607,14 @@ query($owner: String!, $repo: String!, $cursor: String) {
 }
 `;
 
-const STALE_PR_QUERY = `
+export const STALE_PR_QUERY = `
 query($owner: String!, $repo: String!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequests(
       first: 30
       after: $cursor
       states: [OPEN]
-      orderBy: { field: UPDATED_AT, direction: ASC }
+      orderBy: { field: CREATED_AT, direction: DESC }
     ) {
       pageInfo {
         hasNextPage
