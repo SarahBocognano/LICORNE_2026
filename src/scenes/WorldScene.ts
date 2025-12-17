@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { NPC } from '../objects/Npc';
 import { ServiceRegistry } from '../services/ServiceRegistry';
-import { XPSystem } from '../services/XPSystem';
+// @ts-ignore
 import { GitHubActivityTracker } from '../services/GitHubActivityTracker';
 import { DialogManager } from '../utils/DialogManager';
 import { buildPRListHTML } from '../utils/PrListBuilder';
@@ -57,6 +57,7 @@ export class WorldScene extends Phaser.Scene {
 
     // Config of physics
     this.physics.add.collider(this.player, this.worldLayer);
+    this.physics.add.collider(this.player, this.npc);
 
     // Set up proximity
     this.setupProximityDetection();
@@ -225,11 +226,10 @@ export class WorldScene extends Phaser.Scene {
         this.npc.x, this.npc.y
       );
 
-      // Si le joueur est assez proche
       if (distance < this.interactionDistance) {
         if (!this.isNearNPC) {
           this.isNearNPC = true;
-          this.npc.interact(this); // Passer la scène au NPC pour créer le texte
+          this.npc.interact(this);
         }
       } else {
         if (this.isNearNPC) {
@@ -249,7 +249,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   public createInteractionText(x: number, y: number, message: string) {
-    this.destroyInteractionText(); // Détruire le texte existant s'il y en a un
+    this.destroyInteractionText();
 
     this.interactionText = this.add.text(
       x,
@@ -330,6 +330,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update() {
+    // @ts-ignore
     this.player.update(this.cursors);
   }
 }

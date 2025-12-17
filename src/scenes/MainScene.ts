@@ -10,6 +10,7 @@ export class MainScene extends Phaser.Scene {
     this.load.tilemapTiledJSON('map', 'finalMapWithObjects.json');
     this.load.image('tiles', 'spritesheet.png');
     this.load.atlas('a-king', 'a-king.png', 'a-king_atlas.json');
+    this.load.atlas('characters', 'characters.png', 'characters_atlas.json');
   }
 
   create(): void {
