@@ -2,12 +2,16 @@ import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { NPC } from '../objects/Npc';
 import { ServiceRegistry } from '../services/ServiceRegistry';
-// @ts-ignore
-import { GitHubActivityTracker } from '../services/GitHubActivityTracker';
+import { GitHubActivityTracker } from '../services/GithubActivityTracker';
 import { DialogManager } from '../utils/DialogManager';
 import { buildPRListHTML } from '../utils/PrListBuilder';
 import { XPDisplay } from '../ui/XpDisplay';
 import {QuestNPC} from "../objects/QuestNpc";
+import { showLoadingPRDialog, showPRDialogError } from '../utils/PrDialogUtils';
+import { fetchNeglectedPRs, pickRandomPR } from '../services/PrServiceUtils';
+
+const MIN_AGE = 1
+const TIME_UNIT = 'hours'
 
 export class WorldScene extends Phaser.Scene {
   private player!: Player;
@@ -19,6 +23,7 @@ export class WorldScene extends Phaser.Scene {
   private worldLayer!: Phaser.Tilemaps.TilemapLayer;
   private interactionDistance = 50;
   private isNearNPC = false;
+  private isNearQuestNPC = false;
   private interactionText?: Phaser.GameObjects.Text;
   private hasShownDialog = false;
   private xpDisplay!: XPDisplay;
@@ -129,8 +134,17 @@ export class WorldScene extends Phaser.Scene {
 
       // Press E to interact with NPC
       this.input.keyboard.on('keydown-E', () => {
-        if (this.isNearNPC && !DialogManager.isOpen()) {
+        console.log("DialogManager.isOpen()", DialogManager.isOpen())
+        if (DialogManager.isOpen()) {
+          return;
+        }
+
+        if (this.isNearNPC) {
           this.showPRDialog();
+        }
+
+        if (this.isNearQuestNPC) {
+          this.showRandomPRDialog();
         }
       });
 
@@ -231,8 +245,8 @@ export class WorldScene extends Phaser.Scene {
 
       // Sync activity (1+ hour for testing, 7+ days for production)
       const result = await GitHubActivityTracker.syncXP({
-        minAge: 1,
-        timeUnit: 'hours'
+        minAge: MIN_AGE,
+        timeUnit: TIME_UNIT
       });
       // Production: await GitHubActivityTracker.syncXP();
 
@@ -274,22 +288,43 @@ export class WorldScene extends Phaser.Scene {
 
   private setupProximityDetection() {
     this.events.on('update', () => {
-      const distance = Phaser.Math.Distance.Between(
-          this.player.x, this.player.y,
-          this.npc.x, this.npc.y
+
+      // ---------- Normal NPC ----------
+      const npcDistance = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.npc.x, this.npc.y
       );
 
-      if (distance < this.interactionDistance) {
+      if (npcDistance < this.interactionDistance) {
         if (!this.isNearNPC) {
           this.isNearNPC = true;
           this.npc.interact(this);
         }
-      } else {
-        if (this.isNearNPC) {
-          this.isNearNPC = false;
-          this.destroyInteractionText();
-          this.hasShownDialog = false;
+      } else if (this.isNearNPC) {
+        this.isNearNPC = false;
+        this.destroyInteractionText();
+      }
+
+      // ---------- Quest NPC ----------
+      const questDistance = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.questNpc.x, this.questNpc.y
+      );
+
+      if (questDistance < this.interactionDistance) {
+        if (!this.isNearQuestNPC) {
+          this.isNearQuestNPC = true;
+
+          this.createInteractionText(
+            this.questNpc.x,
+            this.questNpc.y,
+            'Press E to get a quest'
+          );
         }
+      } else if (this.isNearQuestNPC) {
+        this.isNearQuestNPC = false;
+        this.destroyInteractionText();
+        this.hasShownDialog = false;
       }
     });
   }
@@ -319,38 +354,19 @@ export class WorldScene extends Phaser.Scene {
     this.interactionText.setDepth(1000);
   }
 
-  private async showPRDialog() {
-    // Prevent showing multiple times
+  private async showRandomPRDialog() {
     if (this.hasShownDialog) return;
     this.hasShownDialog = true;
 
     try {
-      // Step 1: Show loading dialog
+      showLoadingPRDialog();
+
+      const prs = await fetchNeglectedPRs(MIN_AGE, TIME_UNIT);
+      const selectedPR = pickRandomPR(prs);
+
       DialogManager.show({
-        title: '🔍 Checking for neglected PRs...',
-        content: `
-          <div style="text-align: center; padding: 60px 40px;">
-            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-            <div style="font-size: 18px; color: #ffff00;">Loading...</div>
-            <div style="font-size: 14px; color: #888; margin-top: 8px;">
-              Fetching PRs from GitHub
-            </div>
-          </div>
-        `,
-      });
-
-      // Step 2: Get GitHub service from global registry
-      const github = ServiceRegistry.getGitHub();
-
-      // Step 3: Fetch top 10 neglected PRs
-      // Use 'hours' for testing, 'days' for production
-      const prs = await github.getTop10MostNeglectedPRs(1, 'hours'); // 1+ hour for testing
-      // const prs = await github.getTop10MostNeglectedPRs(3, 'days'); // 3+ days for production
-
-      // Step 4: Show results in scrollable dialog
-      DialogManager.show({
-        title: '🚨 Neglected PRs Need Your Help!',
-        content: buildPRListHTML(prs, 'hours'),
+        title: '📜 Your Quest',
+        content: buildPRListHTML([selectedPR], TIME_UNIT),
         width: '700px',
         height: '80vh',
         onClose: () => {
@@ -359,25 +375,34 @@ export class WorldScene extends Phaser.Scene {
       });
 
     } catch (error) {
-      console.error('Error fetching PRs:', error);
+      showPRDialogError(error, () => {
+        this.hasShownDialog = false;
+      });
+    }
+  }
 
-      // Show error dialog
+  private async showPRDialog() {
+    if (this.hasShownDialog) return;
+    this.hasShownDialog = true;
+
+    try {
+      showLoadingPRDialog();
+
+      const prs = await fetchNeglectedPRs(MIN_AGE, TIME_UNIT);
+
       DialogManager.show({
-        title: '❌ Error Loading PRs',
-        content: `
-          <div style="text-align: center; padding: 60px 40px;">
-            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-            <div style="font-size: 18px; color: #ff4444; margin-bottom: 12px;">
-              Failed to load PRs
-            </div>
-            <div style="font-size: 14px; color: #888; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 4px; margin-top: 16px;">
-              ${error instanceof Error ? error.message : 'Unknown error'}
-            </div>
-          </div>
-        `,
+        title: '🚨 Neglected PRs Need Your Help!',
+        content: buildPRListHTML(prs, TIME_UNIT),
+        width: '700px',
+        height: '80vh',
         onClose: () => {
           this.hasShownDialog = false;
         }
+      });
+
+    } catch (error) {
+      showPRDialogError(error, () => {
+        this.hasShownDialog = false;
       });
     }
   }
