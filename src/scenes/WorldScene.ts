@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { Player } from '../objects/Player';
 import { NPC } from '../objects/Npc';
+import { ServiceRegistry } from '../services/ServiceRegistry';
+import { DialogManager } from '../utils/DialogManager';
+import { buildPRListHTML } from '../utils/PrListBuilder';
 
 export class WorldScene extends Phaser.Scene {
   private player!: Player;
@@ -12,6 +15,7 @@ export class WorldScene extends Phaser.Scene {
   private interactionDistance = 50;
   private isNearNPC = false;
   private interactionText?: Phaser.GameObjects.Text;
+  private hasShownDialog = false;
 
   constructor() {
     super({ key: 'WorldScene' });
@@ -52,6 +56,12 @@ export class WorldScene extends Phaser.Scene {
 
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
+
+      this.input.keyboard.on('keydown-E', () => {
+        if (this.isNearNPC && !DialogManager.isOpen()) {
+          this.showPRDialog();
+        }
+      });
     }
   }
 
@@ -100,6 +110,66 @@ export class WorldScene extends Phaser.Scene {
     );
     this.interactionText.setOrigin(0.5);
     this.interactionText.setDepth(1000);
+  }
+
+private async showPRDialog() {
+    // Prevent showing multiple times
+    if (this.hasShownDialog) return;
+    this.hasShownDialog = true;
+
+    try {
+      // Step 1: Show loading dialog
+      DialogManager.show({
+        title: '🔍 Checking for neglected PRs...',
+        content: `
+          <div style="text-align: center; padding: 60px 40px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+            <div style="font-size: 18px; color: #ffff00;">Loading...</div>
+            <div style="font-size: 14px; color: #888; margin-top: 8px;">
+              Fetching PRs from GitHub
+            </div>
+          </div>
+        `,
+      });
+
+      // Step 2: Get GitHub service from global registry
+      const github = ServiceRegistry.getGitHub();
+
+      // Step 3: Fetch top 10 neglected PRs
+      // Use 'hours' for testing, 'days' for production
+      const prs = await github.getTop10MostNeglectedPRs(1, 'hours'); // 1+ hour for testing
+      // const prs = await github.getTop10MostNeglectedPRs(3, 'days'); // 3+ days for production
+
+      // Step 4: Show results in scrollable dialog
+      DialogManager.show({
+        title: '🚨 Neglected PRs Need Your Help!',
+        content: buildPRListHTML(prs, 'hours'),
+        width: '700px',
+        height: '80vh',
+        onClose: () => {
+          this.hasShownDialog = false;
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching PRs:', error);
+      
+      // Show error dialog
+      DialogManager.show({
+        title: '❌ Error Loading PRs',
+        content: `
+          <div style="text-align: center; padding: 60px 40px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+            <div style="font-size: 18px; color: #ff4444; margin-bottom: 12px;">
+              Failed to load PRs
+            </div>
+            <div style="font-size: 14px; color: #888; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 4px; margin-top: 16px;">
+              ${error instanceof Error ? error.message : 'Unknown error'}
+            </div>
+          </div>
+        `,
+      });
+    }
   }
 
   update() {
