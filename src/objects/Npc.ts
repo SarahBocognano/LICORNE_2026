@@ -11,7 +11,7 @@ export class NPC extends Phaser.Physics.Arcade.Sprite {
 
   interact(scene: Phaser.Scene) {
     if (scene instanceof WorldScene) {
-      scene.createInteractionText(this.x, this.y, "Bonjour ! Voici mon stand.");
+      scene.createInteractionText(this.x, this.y, "Bonjour ! Voici mon stand. Appuie sur [E]");
     }
   }
 }
