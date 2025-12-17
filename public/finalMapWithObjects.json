@@ -634,6 +634,17 @@
                  "width":0,
                  "x":679.333333333333,
                  "y":214.666666666667
+                }, 
+                {
+                 "height":0,
+                 "id":27,
+                 "name":"NPC 2",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":584.85579685166,
+                 "y":500.97667470987
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -698,7 +709,7 @@
          "y":0
         }],
  "nextlayerid":11,
- "nextobjectid":26,
+ "nextobjectid":28,
  "orientation":"orthogonal",
  "properties":[
         {

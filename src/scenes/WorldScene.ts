@@ -7,10 +7,12 @@ import { GitHubActivityTracker } from '../services/GitHubActivityTracker';
 import { DialogManager } from '../utils/DialogManager';
 import { buildPRListHTML } from '../utils/PrListBuilder';
 import { XPDisplay } from '../ui/XpDisplay';
+import {QuestNPC} from "../objects/QuestNpc";
 
 export class WorldScene extends Phaser.Scene {
   private player!: Player;
   private npc!: NPC;
+  private questNpc!: QuestNPC;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private map!: Phaser.Tilemaps.Tilemap;
   private tileset!: Phaser.Tilemaps.Tileset;
@@ -42,6 +44,9 @@ export class WorldScene extends Phaser.Scene {
 
     const npcPoint = this.map.findObject('Objects', (obj) => obj.name === 'NPC') || { x: 500, y: 300 };
     this.npc = new NPC(this, npcPoint.x as number, npcPoint.y as number);
+
+    const npcQuestPoint = this.map.findObject('Objects', (obj) => obj.name === 'NPC 2') || { x: 500, y: 300 };
+    this.questNpc = new QuestNPC(this, npcQuestPoint.x as number, npcQuestPoint.y as number);
 
     // Handle objects with collisions
     const objectLayer = this.map.getObjectLayer('Objects');
@@ -105,6 +110,7 @@ export class WorldScene extends Phaser.Scene {
     // Config of physics
     this.physics.add.collider(this.player, this.worldLayer);
     this.physics.add.collider(this.player, this.npc);
+    this.physics.add.collider(this.player, this.questNpc);
 
     // Set up proximity
     this.setupProximityDetection();
