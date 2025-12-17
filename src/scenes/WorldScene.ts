@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { Player } from './PlayerScene';
-import { NPC } from './NpcScene';
+import { Player } from '../objects/Player';
+import { NPC } from '../objects/Npc';
 
 export class WorldScene extends Phaser.Scene {
   private player!: Player;
@@ -15,27 +15,27 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
-    // 1. Charger la map
+    // Load map
     this.map = this.make.tilemap({ key: 'map' });
     this.tileset = this.map.addTilesetImage('tiles', 'tiles')!;
 
-    // 2. Créer la couche principale
+    // Create principal layer
     this.worldLayer = this.map.createLayer('Tile Layer 1', this.tileset, 0, 0)!;
 
-    // 3. Configurer les collisions
+    // Config collisions
     this.worldLayer.setCollisionByProperty({ collides: true });
 
-    // 4. Créer le joueur et le NPC
+    // Create Player and NPC on map
     const spawnPoint = this.map.findObject('Objects', (obj) => obj.name === 'Spawn Point') || { x: 400, y: 300 };
-    this.player = new Player(this, spawnPoint.x, spawnPoint.y);
+    this.player = new Player(this, spawnPoint.x as number, spawnPoint.y as number);
 
     const npcPoint = this.map.findObject('Objects', (obj) => obj.name === 'NPC') || { x: 500, y: 300 };
-    this.npc = new NPC(this, npcPoint.x, npcPoint.y);
+    this.npc = new NPC(this, npcPoint.x as number, npcPoint.y as number);
 
-    // 5. Configurer la physique
+    // Config of physics
     this.physics.add.collider(this.player, this.worldLayer);
 
-    // 6. Configurer la caméra
+    // Config of camera
     const mapWidthPx = this.map.widthInPixels;
     const mapHeightPx = this.map.heightInPixels;
     const zoom = Math.min(window.innerWidth / mapWidthPx, window.innerHeight / mapHeightPx);
@@ -44,13 +44,15 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setZoom(zoom);
     this.cameras.main.startFollow(this.player);
 
-    // 7. Configurer les contrôles
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.input.keyboard.on('keydown-E', () => {
-      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.npc.x, this.npc.y) < 50) {
-        this.npc.interact();
-      }
-    });
+    // Config of controls
+    if (this.input && this.input.keyboard) {
+      this.cursors = this.input.keyboard.createCursorKeys();
+      this.input.keyboard.on('keydown-E', () => {
+        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.npc.x, this.npc.y) < 50) {
+          this.npc.interact();
+        }
+      });
+    }
   }
 
   update() {
