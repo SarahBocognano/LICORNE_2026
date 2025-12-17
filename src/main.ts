@@ -14,7 +14,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [MainScene, WorldScene, LauncherScene, PRDisplayScene, LeaderboardScene, MainScene],
+  scene: [MainScene, WorldScene, LauncherScene, LeaderboardScene, MainScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH

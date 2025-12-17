@@ -12,7 +12,9 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@octokit/graphql": "^9.0.3",
     "@octokit/types": "^16.0.0",
+    "graphql-tag": "^2.12.6",
     "jest": "^30.2.0",
     "octokit": "^5.0.5",
     "phaser": "^3.90.0",
