@@ -43,6 +43,23 @@ export class WorldScene extends Phaser.Scene {
     const npcPoint = this.map.findObject('Objects', (obj) => obj.name === 'NPC') || { x: 500, y: 300 };
     this.npc = new NPC(this, npcPoint.x as number, npcPoint.y as number);
 
+    const objectLayer = this.map.getObjectLayer('Objects');
+    if (objectLayer) {
+      objectLayer.objects.forEach((obj) => {
+        const collides = Boolean(obj.properties?.find((p: any) => p.name === 'collides')?.value);
+        if (collides && obj.name !== 'NPC' && obj.name !== 'Spawn Point') {
+          const collider = this.add.rectangle(
+              (obj.x as number) + (obj.width ?? 16) / 2,
+              (obj.y as number) + (obj.height ?? 16) / 2,
+              obj.width ?? 16,
+              obj.height ?? 16
+          );
+          this.physics.add.existing(collider, true); // true = StaticBody
+          this.physics.add.collider(this.player, collider);
+        }
+      });
+    }
+
     // Create XP display (top-left)
     const displayX = 40;
     this.xpDisplay = new XPDisplay(this, displayX, 40);
@@ -141,7 +158,7 @@ export class WorldScene extends Phaser.Scene {
       if (username && username.trim()) {
         GitHubActivityTracker.setUsername(username.trim());
         alert(`✅ Username set to: ${username.trim()}\n\nSyncing your GitHub activity...`);
-        
+
         // Auto-sync after setting username
         this.syncGitHubActivity();
       }
@@ -177,9 +194,9 @@ export class WorldScene extends Phaser.Scene {
       loadingText.setDepth(10001);
 
       // Sync activity (1+ hour for testing, 7+ days for production)
-      const result = await GitHubActivityTracker.syncXP({ 
-        minAge: 1, 
-        timeUnit: 'hours' 
+      const result = await GitHubActivityTracker.syncXP({
+        minAge: 1,
+        timeUnit: 'hours'
       });
       // Production: await GitHubActivityTracker.syncXP();
 
@@ -193,9 +210,9 @@ export class WorldScene extends Phaser.Scene {
           leveledUp: result.leveledUp || false,
           newLevel: result.newLevel,
         };
-        
+
         this.xpDisplay.showXPGain(gain);
-        
+
         // Refresh display after animation starts
         setTimeout(() => {
           this.xpDisplay.refresh();
@@ -206,7 +223,7 @@ export class WorldScene extends Phaser.Scene {
         const message = result.newActivities.length > 0
           ? `✨ Synced!\n\n${result.newActivities.join('\n')}\n\nTotal: +${result.xpGained} XP${levelUpText}`
           : `✨ First Sync Complete!\n\nGained ${result.xpGained} XP for your existing activity!${levelUpText}`;
-        
+
         alert(message);
       } else {
         const username = GitHubActivityTracker.getStoredUsername();
@@ -222,8 +239,8 @@ export class WorldScene extends Phaser.Scene {
   private setupProximityDetection() {
     this.events.on('update', () => {
       const distance = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y,
-        this.npc.x, this.npc.y
+          this.player.x, this.player.y,
+          this.npc.x, this.npc.y
       );
 
       if (distance < this.interactionDistance) {
@@ -252,15 +269,15 @@ export class WorldScene extends Phaser.Scene {
     this.destroyInteractionText();
 
     this.interactionText = this.add.text(
-      x,
-      y - 40,
-      message,
-      {
-        fontSize: '16px',
-        color: '#ffffff',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        padding: { x: 10, y: 5 }
-      }
+        x,
+        y - 40,
+        message,
+        {
+          fontSize: '16px',
+          color: '#ffffff',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          padding: { x: 10, y: 5 }
+        }
     );
     this.interactionText.setOrigin(0.5);
     this.interactionText.setDepth(1000);
@@ -307,7 +324,7 @@ export class WorldScene extends Phaser.Scene {
 
     } catch (error) {
       console.error('Error fetching PRs:', error);
-      
+
       // Show error dialog
       DialogManager.show({
         title: '❌ Error Loading PRs',
