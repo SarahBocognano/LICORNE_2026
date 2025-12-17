@@ -1,29 +1,36 @@
 import Phaser from 'phaser';
 
 export class MainScene extends Phaser.Scene {
-  private text!: Phaser.GameObjects.Text;
-
   constructor() {
     super('MainScene');
   }
 
   preload(): void {
-    // Ici tu pourras plus tard charger des assets (tileset, sprite du perso, etc.)
+    this.load.tilemapTiledJSON('map', '/finalMap.json');
+    this.load.image('spritesheet', '/spritesheet.png');
   }
 
   create(): void {
-    this.text = this.add.text(20, 20, 'RPG GitHub + Phaser', {
-      fontFamily: 'Arial',
-      fontSize: '24px',
-      color: '#ffffff',
-    });
+    const map = this.make.tilemap({ key: 'map' });
+    console.log('map size in tiles:', map.width, map.height);
+    console.log('map size in pixels:', map.widthInPixels, map.heightInPixels);
 
-    // Exemple : personnage représenté par un simple carré
-    const player = this.add.rectangle(400, 300, 32, 32, 0x00ff00);
-    this.add.existing(player);
-  }
+    const tileset = map.addTilesetImage('tiles', 'spritesheet');
+    const layer = map.createLayer('Tile Layer 1', tileset!, 0, 0);
 
-  update(time: number, delta: number): void {
-    // Boucle de jeu (plus tard : déplacement, interactions PNJ, etc.)
+    const mapWidthPx = map.widthInPixels;
+    const mapHeightPx = map.heightInPixels;
+
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    const zoomX = screenW / mapWidthPx;
+    const zoomY = screenH / mapHeightPx;
+
+    const zoom = Math.max(zoomX, zoomY);
+
+    this.cameras.main.setBounds(0, 0, mapWidthPx, mapHeightPx);
+    this.cameras.main.setZoom(zoom);
+    this.cameras.main.centerOn(mapWidthPx / 2, mapHeightPx / 2);
   }
 }
