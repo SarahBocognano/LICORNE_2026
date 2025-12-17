@@ -1,20 +1,7 @@
-import type { Endpoints } from '@octokit/types';
-
-export type GitHubPullRequest = Endpoints['GET /repos/{owner}/{repo}/pulls']['response']['data'][0];
-export type GitHubReview = Endpoints['GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews']['response']['data'][0];
-export type GitHubUser = Endpoints['GET /users/{username}']['response']['data'];
-
 export interface GitHubConfig {
   token: string;
   owner: string;
   repo: string;
-}
-
-export interface PRWithReviewInfo {
-  pr: GitHubPullRequest;
-  reviews: GitHubReview[];
-  ageDays: number;
-  hasReviews: boolean;
 }
 
 export interface ReviewerStats {
@@ -28,25 +15,6 @@ export interface ReviewerStats {
   points: number;              // Total points
 }
 
-export interface GitHubUserSearchResult {
-  username: string;
-  id: number;
-  avatar_url: string;
-  html_url: string;
-  type: string;
-}
-
-export interface ReviewerStatsWithUser extends ReviewerStats {
-  userInfo: {
-    name: string | null;
-    email: string | null;
-    avatar_url: string;
-    bio: string | null;
-    company: string | null;
-    location: string | null;
-  } | null;
-}
-
 export interface StalePR {
   number: number;
   title: string;
@@ -54,6 +22,20 @@ export interface StalePR {
   createdAt: string;
   reviewCount: number;
   commentCount: number;
+}
+
+export type UrgencyLevel = 'normal' | 'warning' | 'urgent' | 'critical';
+
+export interface PRStatus {
+  urgency: UrgencyLevel;
+  message: string;
+  color: number;  // Phaser color hex
+  emoji: string;
+}
+
+export interface PRWithStatus extends StalePR {
+  ageDays: number;
+  status: PRStatus;
 }
 
 export interface LeaderboardQueryResult {
@@ -79,41 +61,6 @@ export interface LeaderboardQueryResult {
     };
   };
 }
-
-export const STALE_PR_QUERY = `
-query($owner: String!, $repo: String!, $cursor: String) {
-  repository(owner: $owner, name: $repo) {
-    pullRequests(
-      first: 30
-      after: $cursor
-      states: [OPEN]
-      orderBy: { field: UPDATED_AT, direction: ASC }
-    ) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      nodes {
-        number
-        title
-        url
-        createdAt
-        reviews(first: 30) {
-          nodes {
-            state
-            author { login }
-          }
-        }
-        comments(first: 30) {
-          nodes {
-            author { login }
-          }
-        }
-      }
-    }
-  }
-}
-`;
 
 export interface StalePRQueryResult {
   repository: {
