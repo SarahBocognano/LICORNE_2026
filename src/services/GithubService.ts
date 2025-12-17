@@ -442,10 +442,12 @@ export class GitHubService {
     // Get all stale PRs (3+ time units old)
     console.log("min time", minTime, timeUnit)
     const stalePRs = await this.fetchStalePRs(minTime, false, timeUnit);
+    const unreviewedPRs = stalePRs.filter(pr => pr.reviewCount === 0);
+
     const now = new Date();
 
     // Add status to each PR
-    const prsWithStatus: PRWithStatus[] = stalePRs.map(pr => {
+    const prsWithStatus: PRWithStatus[] = unreviewedPRs.map(pr => {
       const createdAt = new Date(pr.createdAt);
       const ageMs = now.getTime() - createdAt.getTime();
       
