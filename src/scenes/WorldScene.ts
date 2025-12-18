@@ -171,7 +171,7 @@ export class WorldScene extends Phaser.Scene {
     button.setScrollFactor(0);
     button.setDepth(10000);
 
-    const bg = this.add.rectangle(30, 100, 250, 40, 0x4493f8, 0.9)
+    const bg = this.add.rectangle(30, 100, 250, 40, 0xd4a373, 0.9)
       .setOrigin(0, 0)
       .setInteractive({ useHandCursor: true });
 
