@@ -27,51 +27,50 @@ export class XPDisplay {
   private createDisplay(): void {
     const width = 250;
     const height = 70;
+    const offsetY = 25;
 
     // Background
-    const bg = this.scene.add.rectangle(0, 0, width, height, 0x000000, 0.8)
-      .setOrigin(0, 0);
-
-    const border = this.scene.add.rectangle(0, 0, width, height)
-      .setStrokeStyle(2, 0xffd700)
-      .setOrigin(0, 0);
+    const bg = this.scene.add.image(0, 0, 'parchment-scroll')
+      .setOrigin(0, 0)
+      .setDisplaySize(300, 180);
 
     // Level badge
-    const levelBadge = this.scene.add.circle(30, 30, 25, 0xffd700);
+    const levelBadge = this.scene.add.image(150, 35 + offsetY, 'seal')
+      .setOrigin(0.5)
+      .setDisplaySize(50, 50);
     
-    this.levelText = this.scene.add.text(30, 30, '1', {
+    this.levelText = this.scene.add.text(150, 35 + offsetY, '1', {
       fontFamily: 'Arial',
       fontSize: '20px',
-      color: '#000000',
+      color: '#efefef',
       fontStyle: 'bold',
     }).setOrigin(0.5);
 
     // Title and rank
-    this.titleText = this.scene.add.text(65, 15, '🌱 Rookie Reviewer', {
-      fontFamily: 'Arial',
+    this.titleText = this.scene.add.text(65, 65 + offsetY, '🌱 Rookie Reviewer', {
+      fontFamily: 'Cinzel',
       fontSize: '14px',
-      color: '#ffd700',
+      color: '#4D2E09',
       fontStyle: 'bold',
     }).setOrigin(0, 0);
 
     // XP bar background
-    this.xpBarBg = this.scene.add.rectangle(65, 40, 175, 12, 0x2d2d2d)
+    this.xpBarBg = this.scene.add.rectangle(65, 90 + offsetY, 175, 12, 0x2d2d2d)
       .setOrigin(0, 0);
 
     // XP bar (progress)
-    this.xpBar = this.scene.add.rectangle(65, 40, 0, 12, 0x00ff00)
+    this.xpBar = this.scene.add.rectangle(65, 90 + offsetY, 0, 12, 0x00ff00)
       .setOrigin(0, 0);
 
     // XP text
-    this.xpText = this.scene.add.text(65, 55, '0 / 100 XP', {
+    this.xpText = this.scene.add.text(65, 105 + offsetY, '0 / 100 XP', {
       fontFamily: 'Arial',
       fontSize: '10px',
-      color: '#cccccc',
+      color: '#4D2E09',
     }).setOrigin(0, 0);
 
     this.container.add([
       bg,
-      border,
       levelBadge,
       this.levelText,
       this.titleText,

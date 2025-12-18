@@ -171,11 +171,11 @@ export class WorldScene extends Phaser.Scene {
     button.setScrollFactor(0);
     button.setDepth(10000);
 
-    const bg = this.add.rectangle(0, 0, 250, 40, 0x4493f8, 0.9)
+    const bg = this.add.rectangle(30, 100, 250, 40, 0x4493f8, 0.9)
       .setOrigin(0, 0)
       .setInteractive({ useHandCursor: true });
 
-    const text = this.add.text(125, 20, '🔄 Sync Activity (S)', {
+    const text = this.add.text(155, 120, '🔄 Sync Activity (S)', {
       fontFamily: 'Arial',
       fontSize: '12px',
       color: '#ffffff',

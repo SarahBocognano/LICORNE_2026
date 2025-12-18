@@ -11,6 +11,10 @@ export class MainScene extends Phaser.Scene {
     this.load.image('tiles', 'spritesheet.png');
     this.load.atlas('a-king', 'a-king.png', 'a-king_atlas.json');
     this.load.atlas('characters', 'characters.png', 'characters_atlas.json');
+
+    // UI – parchments
+    this.load.image('parchment-scroll', 'parchment-scroll.png');
+    this.load.image('seal', 'seal.png');
   }
 
   create(): void {
