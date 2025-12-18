@@ -9,6 +9,7 @@ import { XPDisplay } from '../ui/XpDisplay';
 import {QuestNPC} from "../objects/QuestNpc";
 import { showLoadingPRDialog, showPRDialogError } from '../utils/PrDialogUtils';
 import { fetchNeglectedPRs, pickRandomPR } from '../services/PrServiceUtils';
+import {HeartDisplay} from "../ui/HeartDisplay";
 
 const MIN_AGE = 1
 const TIME_UNIT = 'hours'
@@ -27,6 +28,7 @@ export class WorldScene extends Phaser.Scene {
   private interactionText?: Phaser.GameObjects.Text;
   private hasShownDialog = false;
   private xpDisplay!: XPDisplay;
+  private hearts!: HeartDisplay;
 
   constructor() {
     super({ key: 'WorldScene' });
@@ -101,11 +103,17 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // Create XP display (top-left)
-    const displayX = 40;
-    this.xpDisplay = new XPDisplay(this, displayX, 40);
+    const displayX = 120;
+    this.xpDisplay = new XPDisplay(this, displayX, 70);
+
+    // Create heart display (top-right)
+    this.hearts = new HeartDisplay(this, 5,
+        this.cameras.main.width - 110,
+        80
+    );
 
     // Add sync button below XP display
-    this.createSyncButton(displayX, 120);
+    this.createSyncButton(displayX, 150);
 
     // Prompt for username if not set
     if (!GitHubActivityTracker.hasUsername()) {
